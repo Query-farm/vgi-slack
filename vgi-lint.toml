@@ -22,3 +22,24 @@ ignore = [
 #   vgi-lint lint --baseline vgi-lint-baseline --update-baseline
 # and uncomment the next line. Only new findings fail after that.
 # baseline = "vgi-lint-baseline"
+
+# Per-object waivers: each scoped to the objects it is about, with its reason.
+[per_object."slack.main.post_message"]
+ignore = [
+  { code = "VGI520", kind = "domain-exemption", reason = "posts a real Slack message; an automated agent-grading run against a live workspace must not send messages" },
+]
+
+[per_object."slack.main.post_messages"]
+ignore = [
+  { code = "VGI520", kind = "domain-exemption", reason = "posts real Slack messages; an automated agent-grading run against a live workspace must not send messages" },
+]
+
+[per_object."slack.main.replies"]
+ignore = [
+  { code = "VGI520", kind = "domain-exemption", reason = "needs a thread ts from the live workspace and DuckDB table-function arguments cannot be subqueries, so no fixed grader can call it; the busiest_thread task exercises it through the agent" },
+]
+
+[per_object."slack.main.auth_info"]
+ignore = [
+  { code = "VGI311", kind = "domain-exemption", reason = "a live auth.test connectivity check whose row depends on the attaching token, not a dataset; a view wrapper is rejected by VGI145" },
+]

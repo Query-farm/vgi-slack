@@ -1,17 +1,17 @@
 /**
  * Assemble the functions into the catalog DuckDB attaches.
  *
- * To add a function: write it (see `greet.ts` / `sequence.ts` /
- * `fetch_items.ts`), then add it to `FUNCTIONS` below.
+ * To add a function: write it (see `read.ts` / `post.ts`), then add it to
+ * `FUNCTIONS` below. ATTACH options live in `slack_catalog.ts`.
  */
 
 import type { CatalogDescriptor, VgiFunction } from "@query-farm/vgi";
-import { API_SECRET_TYPE, fetchItems } from "./fetch_items.ts";
-import { greet, greetWithStyle } from "./greet.ts";
 import { CATALOG_DOC_MD, CATALOG_NAME, CATALOG_TAGS, SCHEMA_DOC_MD, SCHEMA_TAGS, SOURCE_URL } from "./meta.ts";
-import { sequenceTable } from "./sequence.ts";
+import { postMessage, postMessages } from "./post.ts";
+import { authInfo, channels, messages, replies, users } from "./read.ts";
+import { ATTACH_OPTIONS } from "./slack_catalog.ts";
 
-export const FUNCTIONS: VgiFunction[] = [greet, greetWithStyle, sequenceTable, fetchItems];
+export const FUNCTIONS: VgiFunction[] = [authInfo, channels, users, messages, replies, postMessage, postMessages];
 
 interface Example {
   description: string;
@@ -46,7 +46,7 @@ export const CATALOG: CatalogDescriptor = {
   comment: CATALOG_DOC_MD,
   sourceUrl: SOURCE_URL,
   tags: CATALOG_TAGS,
-  secretTypes: [API_SECRET_TYPE],
+  attachOptions: ATTACH_OPTIONS,
   schemas: [
     {
       path: ["main"],

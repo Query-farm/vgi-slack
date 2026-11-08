@@ -1,0 +1,198 @@
+{
+  "status": "passed",
+  "engine": "duckdb",
+  "engine_version": "2.0.0",
+  "worker": [
+    "bin/vgi-slack-worker"
+  ],
+  "attach_sql": "ATTACH 'slack' AS \"slack\" (TYPE vgi, LOCATION 'bin/vgi-slack-worker', token <redacted>, api_url 'http://127.0.0.1:18765');",
+  "checks": [
+    {
+      "name": "token identity",
+      "sql": "SELECT team_id, team, bot_id FROM slack.main.auth_info()",
+      "status": "passed",
+      "rows": [
+        [
+          "T0MOCK",
+          "Mock Team",
+          "B0BOT"
+        ]
+      ],
+      "columns": [
+        "team_id",
+        "team",
+        "bot_id"
+      ]
+    },
+    {
+      "name": "token is redacted",
+      "sql": "SELECT options['token'] FROM duckdb_databases() WHERE database_name = 'slack'",
+      "status": "passed",
+      "rows": [
+        [
+          "<redacted>"
+        ]
+      ],
+      "columns": [
+        "\"options\"['token']"
+      ]
+    },
+    {
+      "name": "channels page",
+      "sql": "SELECT id, name, is_private FROM slack.main.channels() ORDER BY id",
+      "status": "passed",
+      "rows": [
+        [
+          "C0GENERAL",
+          "general",
+          false
+        ],
+        [
+          "C0RANDOM",
+          "random",
+          false
+        ],
+        [
+          "G0SECRET",
+          "secret",
+          true
+        ]
+      ],
+      "columns": [
+        "id",
+        "name",
+        "is_private"
+      ]
+    },
+    {
+      "name": "history spans pages",
+      "sql": "SELECT count(*), min(text), max(text) FROM slack.main.messages('#general')",
+      "status": "passed",
+      "rows": [
+        [
+          25,
+          "message 00",
+          "message 24"
+        ]
+      ],
+      "columns": [
+        "count_star()",
+        "min(\"text\")",
+        "max(\"text\")"
+      ]
+    },
+    {
+      "name": "time bounds",
+      "sql": "SELECT count(*) FROM slack.main.messages('#general', oldest := TIMESTAMPTZ '2026-01-01 00:10:00+00')",
+      "status": "passed",
+      "rows": [
+        [
+          15
+        ]
+      ],
+      "columns": [
+        "count_star()"
+      ]
+    },
+    {
+      "name": "timestamps",
+      "sql": "SELECT ts, epoch_us(posted_at) FROM slack.main.messages('#general') LIMIT 1",
+      "status": "passed",
+      "rows": [
+        [
+          "1767227040.000100",
+          1767227040000100
+        ]
+      ],
+      "columns": [
+        "ts",
+        "epoch_us(posted_at)"
+      ]
+    },
+    {
+      "name": "thread",
+      "sql": "SELECT text FROM slack.main.replies('#general', '1767225900.000100') ORDER BY ts",
+      "status": "passed",
+      "rows": [
+        [
+          "message 05"
+        ],
+        [
+          "reply one"
+        ],
+        [
+          "reply two"
+        ]
+      ],
+      "columns": [
+        "text"
+      ]
+    },
+    {
+      "name": "join users",
+      "sql": "SELECT u.real_name, count(*) FROM slack.main.messages('#general') m JOIN slack.main.users() u ON u.id = m.user_id GROUP BY ALL ORDER BY 2 DESC",
+      "status": "passed",
+      "rows": [
+        [
+          "Ada Lovelace",
+          16
+        ],
+        [
+          "Grace Hopper",
+          9
+        ]
+      ],
+      "columns": [
+        "real_name",
+        "count_star()"
+      ]
+    },
+    {
+      "name": "post one",
+      "sql": "SELECT channel_id, text FROM slack.main.post_message('#random', 'verified')",
+      "status": "passed",
+      "rows": [
+        [
+          "C0RANDOM",
+          "verified"
+        ]
+      ],
+      "columns": [
+        "channel_id",
+        "text"
+      ]
+    },
+    {
+      "name": "post per row, multi-batch",
+      "sql": "SELECT count(*), count(DISTINCT ts) FROM slack.main.post_messages((SELECT 'G0SECRET' AS channel, 'row ' || i AS text, '1767225600.000001' AS thread_ts FROM range(3000) t(i)))",
+      "status": "passed",
+      "rows": [
+        [
+          3000,
+          3000
+        ]
+      ],
+      "columns": [
+        "count_star()",
+        "count(DISTINCT ts)"
+      ]
+    },
+    {
+      "name": "posts read back once",
+      "sql": "SELECT text FROM slack.main.messages('#random')",
+      "status": "passed",
+      "rows": [
+        [
+          "verified"
+        ]
+      ],
+      "columns": [
+        "text"
+      ]
+    }
+  ],
+  "extension_version": "b744d094ed",
+  "extension_repository": "query_farm",
+  "platform": "osx_arm64",
+  "elapsed_seconds": 5.589
+}

@@ -96,7 +96,7 @@ jobs:
           # Set in vgi-lint.toml, so local runs and CI agree.
           fail-on: ${{ steps.lintcfg.outputs.fail_on }}
           # Set to false if your examples need real credentials or network access.
-          execute: true
+          execute: false
 
   docker:
     name: Docker image smoke test

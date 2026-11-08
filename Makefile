@@ -4,14 +4,18 @@
 HAYBARN_VERSION ?= 2.0.0rc11
 # vgi-lint is deliberately not pinned: the gate tracks the current quality bar.
 VGI_LINT        := uvx --prerelease=allow --from 'vgi-lint-check>=2,<3' vgi-lint lint
-LINT_ARGS       ?=
+# Every example calls the live Slack API with a real token, so the metadata check
+# runs at L1 (structural) and does not execute them.
+LINT_ARGS       ?= --no-execute
 WORKER          := $(CURDIR)/bin/vgi-slack-worker
 TOOLS           := $(CURDIR)/.tools
 HAYBARN_UNITTEST := $(TOOLS)/bin/haybarn-unittest
 TRANSPORT       ?= stdio
 
 .DEFAULT_GOAL := help
-.PHONY: help build test test-unit test-sql test-sql-all lint lint-explain lint-ai fmt check run run-http debug tools template-diff clean
+VERIFIER        ?= $(CURDIR)/../.claude/skills/vgi-worker/scripts/verify_worker.py
+
+.PHONY: verify-duckdb help build test test-unit test-sql test-sql-all lint lint-explain lint-ai fmt check run run-http debug tools template-diff clean
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  %-14s %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -43,6 +47,11 @@ test-sql-all: ## SQL tests over every transport
 
 test: test-unit test-sql ## Unit + SQL tests
 
+verify-duckdb: build ## Stock DuckDB 2.0 check of vgi-worker.json against the mock Slack API (VERIFIER=path to verify_worker.py)
+	@uv run -q --no-project python test/mock_api/server.py --port 18765 > /dev/null 2>&1 & pid=$$!; \
+	  trap "kill $$pid" EXIT; sleep 1; \
+	  SLACK_TEST_TOKEN=xoxb-test-token uv run -q --no-project --with duckdb==2.0.0 python "$(VERIFIER)" --project . --timeout 180 --output verification.json
+
 lint-explain: build ## Metadata quality report (vgi-lint, settings in vgi-lint.toml). LINT_ARGS="--format agent" for agents
 	$(VGI_LINT) "$(WORKER)" $(LINT_ARGS)
 
@@ -58,7 +67,7 @@ run-http: build ## Serve over HTTP on port 8000
 	$(WORKER) --http --host 127.0.0.1 --port 8000
 
 debug: build tools ## Run one query against the worker with debug logging on stderr
-	@printf "LOAD vgi;\nATTACH 'slack' (TYPE vgi, LOCATION '$(WORKER) --debug');\nSELECT slack.main.greet('debug');\n" \
+	@printf "LOAD vgi;\nATTACH 'slack' (TYPE vgi, LOCATION '$(WORKER) --debug', token getenv('SLACK_BOT_TOKEN'));\nSELECT * FROM slack.main.auth_info();\n" \
 	  | uvx --from haybarn-cli==$(HAYBARN_VERSION) haybarn -no-agent
 
 template-diff: ## Show upstream template changes since this project was created

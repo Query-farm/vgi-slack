@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "catalog": "slack",
+  "worker": ["bin/vgi-slack-worker"],
+  "attach_options": {
+    "token": {"env": "SLACK_TEST_TOKEN"},
+    "api_url": "http://127.0.0.1:18765"
+  },
+  "checks": [
+    {"name": "token identity", "sql": "SELECT team_id, team, bot_id FROM slack.main.auth_info()", "rows": [["T0MOCK", "Mock Team", "B0BOT"]]},
+    {"name": "token is redacted", "sql": "SELECT options['token'] FROM duckdb_databases() WHERE database_name = 'slack'", "rows": [["<redacted>"]]},
+    {"name": "channels page", "sql": "SELECT id, name, is_private FROM slack.main.channels() ORDER BY id", "rows": [["C0GENERAL", "general", false], ["C0RANDOM", "random", false], ["G0SECRET", "secret", true]]},
+    {"name": "history spans pages", "sql": "SELECT count(*), min(text), max(text) FROM slack.main.messages('#general')", "rows": [[25, "message 00", "message 24"]]},
+    {"name": "time bounds", "sql": "SELECT count(*) FROM slack.main.messages('#general', oldest := TIMESTAMPTZ '2026-01-01 00:10:00+00')", "rows": [[15]]},
+    {"name": "timestamps", "sql": "SELECT ts, epoch_us(posted_at) FROM slack.main.messages('#general') LIMIT 1", "rows": [["1767227040.000100", 1767227040000100]]},
+    {"name": "thread", "sql": "SELECT text FROM slack.main.replies('#general', '1767225900.000100') ORDER BY ts", "rows": [["message 05"], ["reply one"], ["reply two"]]},
+    {"name": "join users", "sql": "SELECT u.real_name, count(*) FROM slack.main.messages('#general') m JOIN slack.main.users() u ON u.id = m.user_id GROUP BY ALL ORDER BY 2 DESC", "rows": [["Ada Lovelace", 16], ["Grace Hopper", 9]]},
+    {"name": "post one", "sql": "SELECT channel_id, text FROM slack.main.post_message('#random', 'verified')", "rows": [["C0RANDOM", "verified"]]},
+    {"name": "post per row, multi-batch", "sql": "SELECT count(*), count(DISTINCT ts) FROM slack.main.post_messages((SELECT 'G0SECRET' AS channel, 'row ' || i AS text, '1767225600.000001' AS thread_ts FROM range(3000) t(i)))", "rows": [[3000, 3000]]},
+    {"name": "posts read back once", "sql": "SELECT text FROM slack.main.messages('#random')", "rows": [["verified"]]}
+  ]
+}

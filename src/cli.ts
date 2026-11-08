@@ -10,7 +10,13 @@
  * SDK's `serveVgiWorker`, which also answers `GET /health`.
  */
 
-import { type CatalogDescriptor, FunctionRegistry, ReadOnlyCatalogInterface, Worker } from "@query-farm/vgi";
+import {
+  type CatalogDescriptor,
+  type CatalogInterface,
+  FunctionRegistry,
+  ReadOnlyCatalogInterface,
+  Worker,
+} from "@query-farm/vgi";
 import { serveVgiWorker } from "@query-farm/vgi/serve";
 import { log, parseLevel, setLogLevel } from "./log.ts";
 
@@ -32,6 +38,11 @@ export interface ServeOptions {
   doc: string;
   /** Source repository linked from the HTTP landing page. */
   repositoryUrl?: string;
+  /**
+   * Build the catalog interface DuckDB attaches. Defaults to the SDK's
+   * ReadOnlyCatalogInterface; override it to declare ATTACH options.
+   */
+  catalogInterface?: (catalog: CatalogDescriptor, registry: FunctionRegistry) => CatalogInterface;
 }
 
 interface HttpArgs {
@@ -108,7 +119,9 @@ export function serve(
   for (const schema of catalog.schemas) {
     for (const fn of schema.functions ?? []) registry.register(fn);
   }
-  const catalogInterface = new ReadOnlyCatalogInterface(catalog, registry);
+  const catalogInterface = options.catalogInterface
+    ? options.catalogInterface(catalog, registry)
+    : new ReadOnlyCatalogInterface(catalog, registry);
 
   if (!args.http) {
     log.debug(`serving catalog ${catalog.name} (${args.rest.includes("--unix") ? "unix socket" : "stdio"})`);

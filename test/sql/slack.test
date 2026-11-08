@@ -1,7 +1,10 @@
 # name: test/sql/slack.test
 # description: SQL-level tests for the slack worker, run through DuckDB by ci/run-integration.sh
 # group: [slack]
-# managed-by: vgi-starters (edit upstream in shared/, then run tools/render.py)
+#
+# Runs against test/mock_api/server.py (an offline Slack mock that also answers
+# the first request for every URL with 429 + Retry-After, so every query below
+# exercises the retry path).
 
 require vgi
 
@@ -9,140 +12,262 @@ require-env SLACK_WORKER
 
 require-env SLACK_MOCK_API
 
-require-env SLACK_MOCK_API_AUTH
+# ------------------------------------------------------------------ attach options
+
+# Without a token the catalog still attaches (so it can be explored), but every
+# Slack call explains how to pass one.
+statement ok
+ATTACH 'slack' AS slack_noauth (TYPE vgi, LOCATION '{SLACK_WORKER}', api_url '{SLACK_MOCK_API}');
+
+statement error
+SELECT * FROM slack_noauth.main.auth_info();
+----
+<REGEX>:.*No Slack token.*
 
 statement ok
-ATTACH 'slack' (TYPE vgi, LOCATION '{SLACK_WORKER}');
+DETACH slack_noauth;
 
-# ---------------------------------------------------------------- greet (scalar)
+# A wrong token is rejected by Slack with invalid_auth.
+statement ok
+ATTACH 'slack' AS slack_bad (TYPE vgi, LOCATION '{SLACK_WORKER}', token 'xoxb-wrong', api_url '{SLACK_MOCK_API}');
 
-query T
-SELECT slack.main.greet('Ada');
-----
-Hi, Ada!
-
-query T
-SELECT slack.main.greet('Ada', 'formal');
-----
-Good day, Ada.
-
-# NULL in, NULL out.
-query T
-SELECT slack.main.greet(NULL);
-----
-NULL
-
-# Works over a whole column, one result per row.
-query T
-SELECT slack.main.greet(name) FROM (VALUES ('Ada'), ('Grace'), (NULL)) AS t(name) ORDER BY ALL NULLS LAST;
-----
-Hi, Ada!
-Hi, Grace!
-NULL
-
-# `style` is constrained to 'casual' | 'formal' and checked when the query is bound.
-# (No expected message: each SDK words constraint errors its own way.)
 statement error
-SELECT slack.main.greet('Ada', 'loud');
+SELECT * FROM slack_bad.main.channels();
 ----
-<REGEX>:.*
+<REGEX>:.*invalid_auth.*
 
-# ------------------------------------------------------ sequence_table (table fn)
+statement ok
+DETACH slack_bad;
 
-query II
-SELECT n, squared FROM slack.main.sequence_table(4) ORDER BY n;
+
+statement ok
+ATTACH 'slack' (TYPE vgi, LOCATION '{SLACK_WORKER}', token 'xoxb-test-token', api_url '{SLACK_MOCK_API}');
+
+# The token is declared secret, so DuckDB redacts it.
+query T
+SELECT options['token'] FROM duckdb_databases() WHERE database_name = 'slack';
 ----
-0	0
-1	1
-2	4
-3	9
+<redacted>
 
-# Named argument with a default.
-query I
-SELECT n FROM slack.main.sequence_table(3, step := 5) ORDER BY n;
-----
-0
-5
-10
+# ------------------------------------------------------------------- auth_info
 
-# Larger than one batch: the cursor must carry across process calls.
-query II
-SELECT count(*), max(n) FROM slack.main.sequence_table(25000);
+query TTTT
+SELECT team_id, team, user_id, bot_id FROM slack.main.auth_info();
 ----
-25000	24999
+T0MOCK	Mock Team	U0BOT	B0BOT
+
+# -------------------------------------------------------------------- channels
+
+query TTTTI
+SELECT id, name, is_private, is_member, num_members FROM slack.main.channels() ORDER BY id;
+----
+C0GENERAL	general	false	true	4
+C0RANDOM	random	false	true	3
+G0SECRET	secret	true	true	2
 
 query I
-SELECT count(*) FROM slack.main.sequence_table(0);
+SELECT count(*) FROM slack.main.channels(exclude_archived := false);
 ----
-0
+4
 
-# count is constrained to [0, 1000000].
+query T
+SELECT name FROM slack.main.channels(types := 'private_channel');
+----
+secret
+
+query I
+SELECT epoch(created_at)::BIGINT FROM slack.main.channels() WHERE name = 'general';
+----
+1767139200
+
 statement error
-SELECT * FROM slack.main.sequence_table(-1);
+SELECT * FROM slack.main.channels(types := 'bogus');
 ----
 <REGEX>:.*
 
-# Named arguments are constrained too: step >= 1.
-statement error
-SELECT * FROM slack.main.sequence_table(3, step := 0);
+# ----------------------------------------------------------------------- users
+
+query TTT
+SELECT id, real_name, tz FROM slack.main.users() ORDER BY id;
 ----
-<REGEX>:.*
+U0ADA	Ada Lovelace	Europe/London
+U0BOT	Duck Bot	America/Los_Angeles
+U0GRACE	Grace Hopper	America/New_York
 
-# ------------------------------------------------- fetch_items (REST table fn)
+query TT
+SELECT id, deleted FROM slack.main.users(include_deleted := true) WHERE deleted;
+----
+U0GONE	true
 
+query TT
+SELECT display_name, email FROM slack.main.users() WHERE id = 'U0ADA';
+----
+ada	ada@example.com
+
+# -------------------------------------------------------------------- messages
+
+# A channel can be given as '#name', 'name' or its ID.
 query IIT
-SELECT count(*), sum(id), min(name) FROM slack.main.fetch_items('{SLACK_MOCK_API}', page_size := 4);
+SELECT count(*), count(DISTINCT ts), min(text) FROM slack.main.messages('#general');
 ----
-25	325	item-01
+25	25	message 00
+
+query I
+SELECT count(*) FROM slack.main.messages('general');
+----
+25
+
+query I
+SELECT count(*) FROM slack.main.messages('C0GENERAL');
+----
+25
+
+# Newest first, ts parsed to a timestamp.
+query TTI
+SELECT ts, text, epoch_us(posted_at) FROM slack.main.messages('#general') LIMIT 1;
+----
+1767227040.000100	message 24	1767227040000100
+
+# Server-side time bounds.
+query I
+SELECT count(*) FROM slack.main.messages('#general', oldest := TIMESTAMPTZ '2026-01-01 00:10:00+00');
+----
+15
+
+query I
+SELECT count(*) FROM slack.main.messages('#general',
+  oldest := TIMESTAMPTZ '2026-01-01 00:10:00+00', latest := TIMESTAMPTZ '2026-01-01 00:14:00+00');
+----
+4
+
+# Bounds are microsecond-exact: the 00:14 message's ts is 00:14:00.000100.
+query I
+SELECT count(*) FROM slack.main.messages('#general',
+  oldest := TIMESTAMPTZ '2026-01-01 00:10:00+00', latest := TIMESTAMPTZ '2026-01-01 00:14:00.0001+00');
+----
+5
+
+query TTI
+SELECT text, thread_ts, reply_count FROM slack.main.messages('#general') WHERE reply_count > 0;
+----
+message 05	1767225900.000100	2
 
 query TI
-SELECT category, count(*) FROM slack.main.fetch_items('{SLACK_MOCK_API}') GROUP BY category ORDER BY category;
+SELECT text, epoch(edited_at)::BIGINT FROM slack.main.messages('#general') WHERE edited_at IS NOT NULL;
 ----
-hardware	8
-service	8
-software	9
+message 07	1767226050
 
-# The harness runs SLACK_MOCK_API with MOCK_API_FLAKY=1: every page answers
-# 429 + Retry-After once, so every query above also exercised the retry path.
-
-# SLACK_MOCK_API_AUTH requires a bearer token ('test-token'). Every language's
-# fetch_items must put the HTTP status code in its error message.
-statement error
-SELECT count(*) FROM slack.main.fetch_items('{SLACK_MOCK_API_AUTH}');
+# Join to users for author names.
+query TI
+SELECT u.real_name, count(*) AS n
+FROM slack.main.messages('#general') m JOIN slack.main.users() u ON u.id = m.user_id
+GROUP BY ALL ORDER BY n DESC;
 ----
-401
-
-statement ok
-CREATE SECRET slack_api_test (TYPE slack_api, TOKEN 'test-token');
+Ada Lovelace	16
+Grace Hopper	9
 
 query I
-SELECT count(*) FROM slack.main.fetch_items('{SLACK_MOCK_API_AUTH}', page_size := 25);
+SELECT count(*) FROM slack.main.messages('#random');
 ----
-25
+0
 
-# Several pages: the token must survive between batches (over HTTP each batch is a
-# separate request, so a token kept only in memory is lost after page 1).
+statement error
+SELECT * FROM slack.main.messages('#does-not-exist');
+----
+<REGEX>:.*not found.*
+
+statement error
+SELECT * FROM slack.main.messages('C0OLD');
+----
+<REGEX>:.*not_in_channel.*
+
+# --------------------------------------------------------------------- replies
+
+query TT
+SELECT user_id, text FROM slack.main.replies('#general', '1767225900.000100') ORDER BY ts;
+----
+U0ADA	message 05
+U0GRACE	reply one
+U0ADA	reply two
+
+statement error
+SELECT * FROM slack.main.replies('#general', 'not-a-ts');
+----
+<REGEX>:.*
+
+# ---------------------------------------------------------------- post_message
+
+query TT
+SELECT channel_id, text FROM slack.main.post_message('#random', 'hello from duckdb');
+----
+C0RANDOM	hello from duckdb
+
+# The post landed exactly once and reads back.
+query TTT
+SELECT user_id, bot_id, text FROM slack.main.messages('#random');
+----
+U0BOT	B0BOT	hello from duckdb
+
+# Reply in a thread: the reply carries thread_ts and stays out of the history.
+query TT
+SELECT thread_ts, text FROM slack.main.post_message('C0RANDOM', 'in thread', thread_ts := '1767225900.000100');
+----
+1767225900.000100	in thread
+
 query I
-SELECT count(*) FROM slack.main.fetch_items('{SLACK_MOCK_API_AUTH}', page_size := 7);
+SELECT count(*) FROM slack.main.messages('#random');
 ----
-25
-
-statement ok
-DROP SECRET slack_api_test;
-
-# base_url must be http(s).
-statement error
-SELECT * FROM slack.main.fetch_items('ftp://example.com');
-----
-<REGEX>:.*
-
-# page_size is a named argument constrained to [1, 1000].
-statement error
-SELECT * FROM slack.main.fetch_items('{SLACK_MOCK_API}', page_size := 0);
-----
-<REGEX>:.*
+1
 
 statement error
-SELECT * FROM slack.main.fetch_items('{SLACK_MOCK_API}', page_size := 5000);
+SELECT * FROM slack.main.post_message('#random', '');
 ----
-<REGEX>:.*
+<REGEX>:.*text must not be NULL or empty.*
+
+statement error
+SELECT * FROM slack.main.post_message('#nowhere', 'hi');
+----
+<REGEX>:.*channel_not_found.*
+
+# --------------------------------------------------------------- post_messages
+
+query IT
+SELECT count(*), string_agg(text, ',' ORDER BY text)
+FROM slack.main.post_messages((SELECT '#random' AS channel, 'bulk ' || i AS text FROM range(3) t(i)));
+----
+3	bulk 0,bulk 1,bulk 2
+
+query I
+SELECT count(*) FROM slack.main.messages('#random');
+----
+4
+
+# Optional thread_ts column.
+query T
+SELECT thread_ts FROM slack.main.post_messages((SELECT 'C0GENERAL' AS channel, 'r' AS text, '1767225900.000100' AS thread_ts));
+----
+1767225900.000100
+
+# Empty input posts nothing.
+query I
+SELECT count(*) FROM slack.main.post_messages((SELECT '#random' AS channel, 'x' AS text WHERE false));
+----
+0
+
+statement error
+SELECT * FROM slack.main.post_messages((SELECT '#random' AS channel));
+----
+<REGEX>:.*channel.*text.*
+
+statement error
+SELECT * FROM slack.main.post_messages((SELECT '#random' AS channel, NULL::VARCHAR AS text));
+----
+<REGEX>:.*text must not be NULL or empty.*
+
+# More than one input batch (DuckDB sends 2048 rows per batch): every row posts once.
+# Thread replies, so the channel history stays unchanged.
+query II
+SELECT count(*), count(DISTINCT ts)
+FROM slack.main.post_messages((SELECT 'G0SECRET' AS channel, 'row ' || i AS text, '1767225600.000001' AS thread_ts FROM range(5000) t(i)));
+----
+5000	5000

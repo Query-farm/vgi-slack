@@ -22,9 +22,9 @@ export const SOURCE_URL = "https://github.com/your-org/vgi-slack";
  * `vgi.category` must name one of these.
  */
 export const SCHEMA_CATEGORIES = [
-  { name: "text", title: "Text", description: "Functions that build or transform strings." },
-  { name: "generators", title: "Generators", description: "Table functions that generate rows." },
-  { name: "api", title: "REST APIs", description: "Table functions that read from HTTP APIs." },
+  { name: "workspace", title: "Workspace", description: "Channels, users and the token's identity." },
+  { name: "messages", title: "Messages", description: "Read channel history and threads." },
+  { name: "posting", title: "Posting", description: "Post messages to channels and threads." },
 ] as const;
 
 export type Category = (typeof SCHEMA_CATEGORIES)[number]["name"];
@@ -61,68 +61,67 @@ export function column(name: string, type: VgiDataType, comment: string, nullabl
   return field(name, type, nullable, new Map([["comment", comment]]));
 }
 
+const ATTACH_SQL =
+  "ATTACH 'slack' (TYPE vgi, LOCATION '/abs/path/bin/vgi-slack-worker', token getenv('SLACK_BOT_TOKEN'))";
+
 export const CATALOG_DOC_LLM =
-  "An example VGI worker generated from the Query.Farm starter template. It shows the three " +
-  "shapes most workers need: a vectorized scalar function (`greet`, with a one- and two-argument " +
-  "overload), a deterministic table function with a named default argument (`sequence_table`), " +
-  "and a table function that pages through a REST API with retries and an optional bearer token " +
-  "taken from a DuckDB secret or an environment variable (`fetch_items`). Replace these with " +
-  "your own functions; keep the metadata complete so agents can discover and call them.";
+  "Slack as SQL: read a workspace's channels, people and conversation history, and post " +
+  "messages, using a Slack bot token. Attach with the token in the `token` ATTACH option, " +
+  `for example \`${ATTACH_SQL}\`; the optional \`api_url\` option changes the API root. ` +
+  "Key concepts: a channel is identified by an ID such as 'C0123ABCD' (names like '#general' " +
+  "are accepted and looked up); a message is identified by its channel plus its `ts`, a " +
+  "string like '1700000000.123456' that also serves as a thread ID (`thread_ts`). What a query " +
+  "can see depends on the bot's scopes and on which channels it has been invited to. Reach for " +
+  "this worker to analyse Slack activity alongside other data, or to send notifications from a " +
+  "SQL pipeline. Every call goes to the live Slack Web API; rate limits are retried.";
 
 export const CATALOG_DOC_MD =
-  "# VGI slack worker\n\n" +
-  "**An example [VGI](https://query.farm/vgi) worker that brings custom functions into DuckDB " +
-  "SQL.** It was generated from the Query.Farm starter template and is meant to be renamed and " +
-  "rewritten: every function here demonstrates one pattern you will reuse.\n\n" +
-  "- `greet(name)` and `greet(name, style)`: a vectorized scalar with an overload and a " +
-  "constrained constant argument.\n" +
-  "- `sequence_table(count, step := 1)`: a deterministic table function that streams its " +
-  "output in batches.\n" +
-  "- `fetch_items(base_url, page_size := 100)`: wraps a paginated REST API, retrying politely " +
-  "and reading a bearer token from a DuckDB secret or the environment.\n\n" +
-  "The worker speaks Apache Arrow to DuckDB over stdin/stdout, a Unix socket, or HTTP, so the " +
-  "same code runs as a local subprocess or a hosted service. See the " +
-  "[VGI documentation](https://query.farm/vgi/docs/) to learn more.";
+  "# Slack for DuckDB\n\n" +
+  "**Query Slack channels, people and messages, and post messages, from SQL.**\n\n" +
+  `Attach with a bot token: \`${ATTACH_SQL}\`. The token is declared secret, so DuckDB ` +
+  "redacts it from `duckdb_databases()` and never logs it.\n\n" +
+  "Bot token scopes: `channels:read`, `groups:read`, `channels:history`, `groups:history`, " +
+  "`users:read` (plus `users:read.email` for emails) and `chat:write`. Invite the bot to " +
+  "every channel it should read or post in.";
 
 export const SCHEMA_DOC_LLM =
-  "The `main` schema holds the starter template's example functions, one per common worker " +
-  "pattern. `greet(name)` and `greet(name, style)` are vectorized scalars: use them inside a " +
-  "projection or predicate, one result per row; `style` is a constant that must be 'casual' or " +
-  "'formal'. `sequence_table(count, step := 1)` is a deterministic table function that returns " +
-  "`count` rows of `(n, squared)`; use it for demos, tests, and as a template for generators. " +
-  "`fetch_items(base_url, page_size := 100)` reads every item from a paginated JSON REST API as " +
-  "`(id, name, category, price)` rows, streaming one page per batch, retrying rate-limited " +
-  "requests, and authenticating with a `slack_api` DuckDB secret or the `SLACK_API_TOKEN` " +
-  "environment variable. Scalars cannot take named arguments; table functions can.";
+  "Everything Slack lives in `main`. Readers stream Slack's paginated Web API one page per " +
+  "batch, so SQL `LIMIT` stops paging early, and time-bounded history should use the reader's " +
+  "own time arguments rather than a `WHERE` on the timestamp, which would page through the whole " +
+  "channel first. Writers post real messages and return the new message's `ts`. Message rows " +
+  "join to people on `user_id` and to channels on `channel_id`.";
 
 export const SCHEMA_DOC_MD =
   "## main\n\n" +
-  "The starter template's example functions, one per common worker pattern.\n\n" +
-  "- **Scalars** answer one question per row and slot into a projection or predicate.\n" +
-  "- **Table functions** return sets of rows, streamed to DuckDB in Arrow batches.\n" +
-  "- **REST readers** page through an HTTP API and authenticate with a DuckDB secret.";
+  "Readers for the workspace (channels, people, the token's identity) and for conversations " +
+  "(channel history, threads), plus writers that post messages.\n\n" +
+  "Readers page through the Slack API as DuckDB asks for rows, so `LIMIT` is cheap. Bound " +
+  "history with the reader's time arguments instead of filtering afterwards.\n\n" +
+  "Writers post real messages: run them deliberately.";
 
 export const AGENT_TEST_TASKS = [
-  { name: "formal_greeting", prompt: "Using the slack worker, greet the name 'Grace' formally." },
   {
-    name: "sum_of_squares",
-    prompt:
-      "Using the slack worker, what is the sum of the squared column for the first 10 rows " +
-      "of the sequence with the default step?",
+    name: "bot_identity",
+    prompt: "Using the slack worker, which Slack workspace (team name) is the bot connected to?",
   },
   {
-    name: "stepped_sequence",
-    prompt: "List the n values of a 4-row sequence that steps by 5, in ascending order.",
+    name: "busiest_thread",
+    prompt: "Using the slack worker, show the replies in the thread with the most replies in #general, oldest first.",
+  },
+  { name: "member_channels", prompt: "Using the slack worker, list the names of the channels the bot is a member of." },
+  {
+    name: "general_message_count",
+    prompt: "Using the slack worker, how many top-level messages are in the #general channel?",
   },
   {
-    name: "items_per_category",
-    prompt:
-      "The items API is running at https://vgi-starter-api.query-farm.services/v1. How many items does it have in each category?",
+    name: "top_poster",
+    prompt: "Using the slack worker, which user (by real name) posted the most messages in #general?",
   },
 ];
 
 export const CATALOG_TAGS: Record<string, string> = {
   "vgi.title": "VGI Slack Worker",
+  "vgi.subtitle": "Read Slack channels, people and messages, and post messages, from DuckDB SQL.",
   "vgi.doc_llm": CATALOG_DOC_LLM,
   "vgi.doc_md": CATALOG_DOC_MD,
   "vgi.source_url": SOURCE_URL,
@@ -130,7 +129,7 @@ export const CATALOG_TAGS: Record<string, string> = {
   "vgi.license": "0BSD",
   "vgi.author": "Query.Farm",
   "vgi.copyright": "Copyright 2026 Query.Farm LLC",
-  "vgi.keywords": keywordsArray("vgi, duckdb, starter template, example worker, rest api, table function"),
+  "vgi.keywords": keywordsArray("slack, chat, messages, channels, notifications, duckdb, vgi"),
   "vgi.support_contact": `${SOURCE_URL}/issues`,
   "vgi.support_policy_url": `${SOURCE_URL}#support`,
   // Public analyst tasks for `vgi-lint simulate`; private graders live in vgi-agent-tests.yaml.
@@ -139,8 +138,8 @@ export const CATALOG_TAGS: Record<string, string> = {
 
 export const SCHEMA_TAGS: Record<string, string> = {
   "vgi.title": "Slack Functions",
-  domain: "examples",
-  "vgi.keywords": keywordsArray("greeting, sequence, generator, rest api, pagination"),
+  domain: "collaboration",
+  "vgi.keywords": keywordsArray("slack, channels, users, messages, threads, post message"),
   "vgi.doc_llm": SCHEMA_DOC_LLM,
   "vgi.doc_md": SCHEMA_DOC_MD,
   "vgi.categories": JSON.stringify(SCHEMA_CATEGORIES),

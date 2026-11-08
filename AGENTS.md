@@ -25,15 +25,16 @@ src/
   worker.ts        # entry point: serves the catalog over stdio, --unix or --http
   catalog.ts       # assembles the catalog; add new functions to FUNCTIONS
   meta.ts          # catalog/schema metadata + helpers (objectTags, column)
-  greet.ts         # scalar example (overloads, const param with choices)
-  sequence.ts      # table function example (named args, streaming state)
-  fetch_items.ts   # REST API table function (pagination, retries, secrets)
+  slack_catalog.ts # catalog interface: the token / api_url ATTACH options
+  slack_api.ts     # Slack Web API client (retries, errors, channel lookup, ts parsing)
+  read.ts          # auth_info, channels, users, messages, replies
+  post.ts          # post_message, post_messages
   cli.ts           # flag parsing: stdio / --unix / --http (PORT:<n>, /health)
   log.ts           # stderr logger
 bin/               # vgi-slack-worker (what DuckDB launches) and run-recipe
 tests/             # bun unit tests (worker subprocess + mock API)
 test/sql/          # sqllogictest files run through DuckDB
-test/mock_api/     # offline mock of the REST API used by tests
+test/mock_api/     # offline mock of the Slack Web API used by tests
 examples/          # recipes: pushdown, caching, catalog tables, aggregates, COPY …
 ci/                # integration harness used by `make test-sql` and CI
 scripts/           # vgi_template.py (init / template-diff)
@@ -42,8 +43,8 @@ vgi-agent-tests.yaml  # private graders for the agent test tasks
 
 ## Recipe: add a function
 
-1. Create `src/<name>.ts`. Copy the closest example: `greet.ts` for a scalar,
-   `sequence.ts` for a generator, `fetch_items.ts` for an API.
+1. Add it to `src/read.ts` or `src/post.ts`, copying the closest function. Build the
+   Slack client with `clientFor(params.initCall.bind_call)` on every call.
 2. Declare arguments: `params` + `argDocs` (scalars), or the ordered `parameters`
    list when a constant needs `choices`/`ge`/`le`. Table functions use `args`,
    `argDocs` and `argConstraints`; an argument listed in `argDefaults` becomes a
@@ -122,10 +123,12 @@ Recipes for most kinds are in `examples/`.
 - **State must be serializable.** Table-function state (`initialState`/`process`) must be a plain object of numbers, bigints, strings, booleans, arrays or nested plain objects (no `Date`, `Map` or class instances): the SDK infers an Arrow schema for it and serializes it. Over HTTP each batch can be served by a different process, so the cursor travels with the request. Keep it small, and never put secrets in it.
 - **Examples must be deterministic.** Add `ORDER BY`, and no `now()`, random values or
   network. Examples that hit a live API go in `examples`, not `executable_examples`.
-- **Credentials.** Read them from a DuckDB secret first (`CREATE SECRET (TYPE slack_api, …)`),
-  then from an environment variable. Never put them in logs, examples or the repo, and
-  keep them out of table-function state unless the state rule above says
-  the SDK encrypts it. Workers that need real credentials set `execute: false` on the metadata check.
+- **Credentials.** The Slack bot token comes from the `token` ATTACH option (declared
+  `secret` in the descriptor's `attachOptions`). `SlackCatalogInterface.attach()` packs
+  it into `attach_opaque_data`, and every function builds its client with
+  `clientFor(params.initCall.bind_call)`. Never put the token in function state, logs,
+  errors, examples or the repo. The examples need a real token, so the metadata check
+  runs with `--no-execute` / `execute: false`.
 - **Errors.** Raise errors with a clear message. For HTTP failures, include the status
   code. DuckDB shows the message to the user.
 - **Rate limits.** Retry 429 and 5xx with backoff, honour `Retry-After`, and set timeouts on

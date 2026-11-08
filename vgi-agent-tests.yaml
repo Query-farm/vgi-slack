@@ -1,16 +1,22 @@
 # Private graders for the public vgi.agent_test_tasks in the worker's catalog metadata.
 # `vgi-lint lint --ai` runs an agent on each prompt and grades it with check_sql.
 # See https://github.com/Query-farm/vgi-lint-check (VGI920).
+# These need a live Slack workspace: attach with a real token before running --ai.
 tasks:
-  - name: formal_greeting
-    reference_sql: SELECT slack.main.greet('Grace', 'formal') AS greeting
-  - name: sum_of_squares
-    reference_sql: SELECT sum(squared) AS total FROM slack.main.sequence_table(10)
-  - name: stepped_sequence
-    reference_sql: SELECT n FROM slack.main.sequence_table(4, step := 5) ORDER BY n
-  # Reads the public demo API (https://vgi-starter-api.query-farm.services/v1).
-  - name: items_per_category
+  - name: member_channels
+    reference_sql: SELECT name FROM slack.main.channels() WHERE is_member ORDER BY name
+  - name: general_message_count
+    reference_sql: SELECT count(*) AS messages FROM slack.main.messages('#general')
+  - name: top_poster
+    reference_sql: >-
+      SELECT u.real_name FROM slack.main.messages('#general') m
+      JOIN slack.main.users() u ON u.id = m.user_id
+      GROUP BY u.real_name ORDER BY count(*) DESC LIMIT 1
+  - name: bot_identity
+    reference_sql: SELECT team FROM slack.main.auth_info()
+  # Table function arguments must be constants, so an agent finds the thread first
+  # and then reads it; the grader checks the final answer's shape.
+  - name: busiest_thread
     check_sql: >-
-      SELECT count(*) = 3 AND sum(items) = 25
-      FROM (SELECT category, count(*) AS items
-            FROM slack.main.fetch_items('https://vgi-starter-api.query-farm.services/v1') GROUP BY category)
+      SELECT count(*) = 1 + max(reply_count) FILTER (WHERE reply_count IS NOT NULL)
+      FROM slack.main.messages('#general')
