@@ -55,6 +55,10 @@ trap cleanup EXIT
 PORT=""
 start_server() {
   local log="$1"; shift
+  # Create the log before backgrounding: the child opens its redirect only
+  # once it is scheduled, and the poll below would otherwise read a missing
+  # file, which under set -e -o pipefail kills the whole run.
+  : > "$log"
   "$@" >"$log" 2>&1 &
   local pid=$!
   PIDS+=("$pid")
