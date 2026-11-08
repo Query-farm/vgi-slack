@@ -19,7 +19,7 @@ concurrency:
 jobs:
   ci:
     # The template repositories themselves publish no image; forks do.
-    if: ${{ !startsWith(github.repository, 'Query-farm/vgi-slack-') }}
+    if: ${{ !startsWith(github.repository, 'Query-farm/vgi-starter-') }}
     uses: ./.github/workflows/ci.yml
 
   publish:
