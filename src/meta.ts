@@ -15,7 +15,7 @@ import { field, type VgiDataType, type VgiField } from "@query-farm/vgi";
 export const CATALOG_NAME = "slack";
 export const VERSION = "0.1.0";
 
-export const SOURCE_URL = "https://github.com/your-org/vgi-slack";
+export const SOURCE_URL = "https://github.com/Query-farm/vgi-slack";
 
 /**
  * Categories group functions in docs and agent tools. Every object's

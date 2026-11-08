@@ -1,283 +1,150 @@
-<!-- managed-by: vgi-starters (edit upstream in shared/README.md.tmpl, then run tools/render.py) -->
 <p align="center">
   <img src="https://query.farm/media-kit/products/vgi/vgi-logo.png" alt="Vector Gateway Interface (VGI)" width="320">
 </p>
 
-<p align="center"><em>A Query.Farm VGI worker for DuckDB, written in TypeScript.</em></p>
+<p align="center"><em>Read Slack channels, people and messages, and post messages, from DuckDB SQL.</em></p>
 
-# VGI Slack Worker — TypeScript
+# VGI Slack Worker
 
-[![CI](https://github.com/your-org/vgi-slack/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/vgi-slack/actions/workflows/ci.yml)
+[![CI](https://github.com/Query-farm/vgi-slack/actions/workflows/ci.yml/badge.svg)](https://github.com/Query-farm/vgi-slack/actions/workflows/ci.yml)
 [![vgi worker: query.farm](https://query.farm/media-kit/shields/vgi-worker.svg)](https://query.farm)
 
-[VGI](https://query.farm/vgi) lets DuckDB call functions that live in a separate
-process: your code, in any language, exposed as ordinary SQL. This worker adds
-three example functions that you rename and replace with your own:
+A [VGI](https://query.farm/vgi) worker that brings the Slack Web API into DuckDB. Query
+channels, users and history like tables, join them with your other data, and post
+messages from a SQL pipeline. Written in TypeScript on
+[`@query-farm/vgi`](https://github.com/Query-farm/vgi-typescript).
 
-| Function | Kind | Shows you how to |
+| Function | Kind | What it does |
 |---|---|---|
-| `greet(name)` / `greet(name, style)` | scalar | vectorize over a column, overload, constrain a constant |
-| `sequence_table(count, step := 1)` | table | stream rows in batches, take named arguments |
-| `fetch_items(base_url, page_size := 100)` | table | page through a REST API, retry, read a secret |
+| `auth_info()` | table | The workspace and bot behind the attached token |
+| `channels(types := ..., exclude_archived := true)` | table | Channels the bot can see |
+| `users(include_deleted := false)` | table | The workspace directory |
+| `messages(channel, oldest := NULL, latest := NULL)` | table | A channel's history, newest first |
+| `replies(channel, thread_ts)` | table | A thread: parent message and replies |
+| `post_message(channel, text, thread_ts := NULL)` | table | Post one message, returns its `ts` |
+| `post_messages((SELECT channel, text [, thread_ts] ...))` | table in-out | Post one message per row |
 
+Channels can be given as IDs (`'C0123ABCD'`) or names (`'#general'`).
 
 ## Quick start
 
-**Prerequisites:** [Bun](https://bun.sh) 1.3+ and [uv](https://docs.astral.sh/uv/) (it runs the SQL
-test runner and the metadata checker).
+**Prerequisites:** [Bun](https://bun.sh) 1.3+, and a Slack app with a bot token
+(`xoxb-...`) that has these scopes: `channels:read`, `groups:read`, `channels:history`,
+`groups:history`, `users:read` (plus `users:read.email` for emails) and `chat:write`.
+Invite the bot to every channel it should read or post in.
 
 ```bash
 make build
+export SLACK_BOT_TOKEN=xoxb-...
 ```
 
-Then open DuckDB 2.0 or [Haybarn](https://query.farm/products/haybarn) and attach the
-worker. `LOCATION` is the command DuckDB runs to start it; use an absolute path,
-because a relative one resolves against DuckDB's working directory.
-
-**DuckDB 2.0:**
+Attach it from DuckDB 2.0. `LOCATION` is the command DuckDB runs, so use an absolute path:
 
 ```sql
 SET allow_extension_repositories = 'allowed';
 CREATE EXTENSION REPOSITORY IF NOT EXISTS query_farm WITH PREFIX 'https://duckdb-extensions.query.farm';
 INSTALL vgi FROM query_farm;
 LOAD vgi FROM query_farm;
-ATTACH 'slack' (TYPE vgi, LOCATION '/abs/path/to/vgi-slack/bin/vgi-slack-worker');
+
+ATTACH 'slack' (TYPE vgi, LOCATION '/abs/path/to/vgi-slack/bin/vgi-slack-worker',
+                token getenv('SLACK_BOT_TOKEN'));
+
+SELECT team, user FROM slack.main.auth_info();
 ```
 
-**Haybarn 2.0** (`uvx haybarn-cli`):
+On [Haybarn](https://query.farm/products/haybarn), use `INSTALL vgi FROM community; LOAD vgi;`
+instead of the repository lines.
+
+## ATTACH options
+
+| Option | Type | Default | Meaning |
+|---|---|---|---|
+| `token` | `VARCHAR`, secret | none | Slack bot token. Pass it as an expression, e.g. `getenv('SLACK_BOT_TOKEN')`, to keep it out of the SQL text. |
+| `api_url` | `VARCHAR` | `https://slack.com/api` | Web API root. Change it only for a proxy or a test server. |
+
+`token` is declared secret, so DuckDB shows it as `<redacted>` in `duckdb_databases()` and
+never logs it. The worker keeps it in the attach's `attach_opaque_data`, which the SDK seals
+per caller over HTTP, so no worker process holds it in memory between calls.
+
+Without a token the catalog still attaches (so it can be explored), and every Slack call
+explains how to pass one.
+
+## Examples
 
 ```sql
-INSTALL vgi FROM community;
-LOAD vgi;
-ATTACH 'slack' (TYPE vgi, LOCATION '/abs/path/to/vgi-slack/bin/vgi-slack-worker');
+-- Channels the bot can read, largest first.
+SELECT name, num_members FROM slack.main.channels() WHERE is_member ORDER BY num_members DESC;
+
+-- Who talked most in #general this year? Time bounds are applied by Slack.
+SELECT u.real_name, count(*) AS messages
+FROM slack.main.messages('#general', oldest := TIMESTAMPTZ '2026-01-01') m
+JOIN slack.main.users() u ON u.id = m.user_id
+GROUP BY ALL ORDER BY messages DESC LIMIT 10;
+
+-- Read a busy thread.
+SELECT posted_at, user_id, text FROM slack.main.replies('#general', '1700000000.000100') ORDER BY ts;
+
+-- Post, then reply in the new message's thread.
+SELECT ts FROM slack.main.post_message('#deploys', 'Deployed *v1.2* :rocket:');
+SELECT ts FROM slack.main.post_message('#deploys', 'All green', thread_ts := '1700000000.000100');
+
+-- One alert per row of a query.
+SELECT count(*) AS posted FROM slack.main.post_messages((
+  SELECT '#alerts' AS channel, 'Disk ' || pct || '% full on ' || host AS text
+  FROM disk_usage WHERE pct > 95));
 ```
 
-Now call the functions:
+Readers page through Slack as DuckDB asks for rows, so `LIMIT` stops early. Bound history
+with `oldest`/`latest` rather than a `WHERE` on `posted_at`, which pages through the whole
+channel first. Rate limits (429) and server errors are retried, honouring `Retry-After`.
 
-```sql
-SELECT slack.main.greet('Ada');                         -- Hi, Ada!
-SELECT slack.main.greet('Ada', 'formal');               -- Good day, Ada.
-SELECT * FROM slack.main.sequence_table(5, step := 2) ORDER BY n;
-```
-
-`fetch_items` pages through a REST API. Try it against the public demo API (25 fixed items):
-
-```sql
-SELECT category, count(*) AS items, round(avg(price), 2) AS avg_price
-FROM slack.main.fetch_items('https://vgi-starter-api.query-farm.services/v1')
-GROUP BY category ORDER BY category;
-```
-
-If an older cached extension misbehaves, refresh it with `FORCE INSTALL vgi FROM query_farm;`
-(DuckDB) or `FORCE INSTALL vgi FROM community;` (Haybarn).
-
-## Using it in a pipeline
-
-Worker functions compose with everything else in DuckDB:
-
-```sql
--- Materialize an API into a local table.
-CREATE TABLE items AS SELECT * FROM slack.main.fetch_items('https://vgi-starter-api.query-farm.services/v1');
-
--- Join it with local files.
-SELECT i.name, i.price, s.units
-FROM items i JOIN 'sales.parquet' s ON s.item_id = i.id;
-
--- Call a scalar per row of another table.
-SELECT customer, slack.main.greet(customer, 'formal') FROM read_csv('customers.csv');
-```
-
-## Project layout
-
-```
-src/
-  worker.ts        # entry point: serves the catalog over stdio, --unix or --http
-  catalog.ts       # assembles the catalog; add new functions to FUNCTIONS
-  meta.ts          # catalog/schema metadata + helpers (objectTags, column)
-  greet.ts         # scalar example (overloads, const param with choices)
-  sequence.ts      # table function example (named args, streaming state)
-  fetch_items.ts   # REST API table function (pagination, retries, secrets)
-  cli.ts           # flag parsing: stdio / --unix / --http (PORT:<n>, /health)
-  log.ts           # stderr logger
-bin/               # vgi-slack-worker (what DuckDB launches) and run-recipe
-tests/             # bun unit tests (worker subprocess + mock API)
-test/sql/          # sqllogictest files run through DuckDB
-test/mock_api/     # offline mock of the REST API used by tests
-examples/          # recipes: pushdown, caching, catalog tables, aggregates, COPY …
-ci/                # integration harness used by `make test-sql` and CI
-scripts/           # vgi_template.py (init / template-diff)
-vgi-agent-tests.yaml  # private graders for the agent test tasks
-```
-
-## Adding a function
-
-1. Create `src/<name>.ts`. Copy the closest example: `greet.ts` for a scalar,
-   `sequence.ts` for a generator, `fetch_items.ts` for an API.
-2. Declare arguments: `params` + `argDocs` (scalars), or the ordered `parameters`
-   list when a constant needs `choices`/`ge`/`le`. Table functions use `args`,
-   `argDocs` and `argConstraints`; an argument listed in `argDefaults` becomes a
-   named argument (`step := 2`), the others are positional.
-3. Give it `description`, `tags: objectTags(...)` (from `src/meta.ts`) and
-   `examples`.
-4. Add it to `FUNCTIONS` in `src/catalog.ts`.
-
-**Which kind of function?**
-
-| You want to… | Use |
-|---|---|
-| compute one value per input row | a **scalar** function |
-| return a set of rows from arguments (an API, a file, a generator) | a **table** function |
-| transform or aggregate the rows of a query | a **table in-out** function or an **aggregate** |
-| expose a fixed dataset by name (`SELECT * FROM slack.main.t`) | a **catalog table** |
-| write data out to a file or service | `COPY … TO` with a copy function |
-| accept `INSERT` / `UPDATE` / `DELETE` | a catalog table with insert/update/delete functions |
-
-The [examples/](examples/) folder has a recipe for most of these. Writable tables are
-covered in the TypeScript SDK's API reference (look for the table descriptor's
-insert, update and delete functions).
-
-## Secrets and configuration
-
-`fetch_items` shows the recommended pattern. A bearer token comes from a DuckDB secret
-when one exists, and from an environment variable otherwise:
-
-```sql
-CREATE SECRET (TYPE slack_api, TOKEN 'your-token');      -- per session, never logged
-```
-
-```bash
-SLACK_API_TOKEN=your-token make run-http                # for servers and containers
-```
-
-Try it: the demo API's `/v1/auth` endpoint needs the published token `demo-token`.
-
-```sql
-SELECT count(*) FROM slack.main.fetch_items('https://vgi-starter-api.query-farm.services/v1/auth');   -- fails: HTTP 401
-CREATE SECRET (TYPE slack_api, TOKEN 'demo-token');
-SELECT count(*) FROM slack.main.fetch_items('https://vgi-starter-api.query-farm.services/v1/auth');   -- 25
-```
-
-Never bake credentials into the image or the source. If a function can't run without
-real credentials, its examples can't execute in CI either. Set `execute: false` on the
-metadata check for that worker (see `.github/workflows/ci.yml`), and add
-`LINT_ARGS ?= --no-execute` to the Makefile so local runs match.
+Writers post real messages and are marked `VOLATILE`, so DuckDB never caches or repeats them.
 
 ## Testing
 
 ```bash
-make test-unit                 # fast TypeScript unit tests
-make test-sql                  # test/sql/*.test through DuckDB (stdio)
-make test-sql TRANSPORT=http   # …over HTTP (also: launch)
+make test-unit                 # bun unit tests (worker subprocess + mock Slack API)
+make test-sql                  # test/sql/*.test through Haybarn (stdio)
+make test-sql TRANSPORT=http   # ...over HTTP (also: launch)
+make verify-duckdb             # vgi-worker.json through stock DuckDB 2.0 (needs a verifier with attach_options)
 make check                     # everything CI runs
 ```
 
-`test/sql/*.test` files are [sqllogictest](https://duckdb.org/docs/stable/dev/sqllogictest/intro)
-scripts. `ci/run-integration.sh` runs them against your worker and fails on any
-unexpected skip, so a broken transport can't hide behind a green run.
-`fetch_items` is tested against `test/mock_api/server.py` so tests are fast and
-offline.
+Every test runs offline against `test/mock_api/server.py`, a small Slack Web API mock. It
+pages at 10 items and rate-limits the first request for every URL, so each read spans
+several pages (and several HTTP turns) and exercises the retry path. No real token is needed.
 
-**Testing against real data:** put live tests in their own `.test` file that starts with
-`require-env SLACK_LIVE`. They run only when that variable is set. Add the skip reason
-to `EXPECTED_SKIP_REASONS` in CI.
-
-## Metadata and the quality score
-
-DuckDB, agents and documentation tools discover your functions through their metadata:
-titles, descriptions, argument docs, examples and keywords.
-[vgi-lint](https://github.com/Query-farm/vgi-lint-check) checks it, and CI runs it on
-every push. Its settings live in `vgi-lint.toml`, which `make lint-explain`,
-`vgi-lint lint`, and CI all read. This template scores 100/100 with no findings.
-
-```bash
-make lint-explain                              # findings, each with its fix
-make lint-explain LINT_ARGS="--format agent"   # the same, grouped for coding agents
-make lint-ai                                   # optional: an agent must solve vgi-agent-tests.yaml
-```
-
-Each report also states an **assurance level**: how much was actually verified.
-
-| Level | Reached when | Here |
-|---|---|---|
-| L1 structural | the static metadata is clean | workers that need real credentials (`execute: false` in CI) |
-| L2 behavioural | the examples also run and return what they claim | **the CI gate** |
-| L3 semantic | an agent solves the worker's own test tasks, and the docs are reviewed | `make lint-ai`, before publishing |
-
-- **How strict.** Your copy fails on warnings (`fail_on = "warning"` in `vgi-lint.toml`).
-  Raise it to `"info"` before you publish the worker for others.
-- **The linter isn't pinned.** It tracks the current quality bar, so a new rule can flag
-  metadata that passed yesterday. Fix it, or waive the finding.
-- **Waivers.** If a finding is genuinely wrong for your worker, waive it in
-  `vgi-lint.toml` with a `kind` and a `reason`.
-- **Existing workers.** If you're adding this gate to a worker that already has
-  findings, record them with `vgi-lint lint --baseline vgi-lint-baseline --update-baseline`
-  and set `baseline` in `vgi-lint.toml`. After that, only new findings fail.
-
-Metadata lives in `src/meta.ts` and the `tags`/`examples` of each function.
-
-## Logging and debugging
-
-stdout carries the Arrow protocol, so **never print to stdout**. Log to stderr instead.
-Use `log` from `src/log.ts` (it writes to stderr); `--debug` or `--log-level debug` turns it up and also enables the SDK's own tracing (`VGI_DEBUG`).
-
-- Under DuckDB (stdio/launch), worker stderr shows up in DuckDB's error messages and
-  terminal.
-- In Docker it goes to `docker logs`.
-- `make debug` runs one query against the worker with debug logging on.
+The metadata check (`make lint-explain`, [vgi-lint](https://github.com/Query-farm/vgi-lint-check))
+runs with `--no-execute`: the examples need a live workspace.
 
 ## Deploying
 
-The same binary serves stdio (DuckDB starts it locally) or HTTP (you host it):
+The same worker serves stdio (DuckDB starts it) or HTTP (you host it):
 
 ```bash
-docker build -t weather-worker .
-docker run -p 8000:8000 -e SLACK_API_TOKEN=... weather-worker   # health: GET /health
+docker build -t vgi-slack .
+docker run -p 8000:8000 vgi-slack            # health: GET /health
 ```
 
 ```sql
-ATTACH 'slack' (TYPE vgi, LOCATION 'https://workers.example.com/slack');
+ATTACH 'slack' (TYPE vgi, LOCATION 'https://workers.example.com/slack', token getenv('SLACK_BOT_TOKEN'));
 ```
 
-Put hosted workers behind TLS and authentication. See
-[authentication](https://query.farm/vgi/authentication) for bearer tokens and JWTs, and
-[distributing a worker](https://query.farm/vgi/distributing-a-worker) for packaging.
-Pass secrets with `-e` or your platform's secret manager.
+Each user attaches with their own token; nothing is configured on the server. Put hosted
+workers behind TLS. See [authentication](https://query.farm/vgi/authentication).
 
 ## Releasing
 
-Push a tag like `v0.1.0`. The release workflow compiles the worker with `bun build --compile` into a standalone executable for Linux (x86-64, arm64), macOS (arm64) and Windows (x86-64), and attaches the archives to the GitHub release. Users download one file and point `LOCATION` at it, with no Bun or `node_modules` on the host. Every artifact is signed with cosign and
-carries SLSA build provenance. `ci/check-version.sh` makes sure the tag matches the
-version in `package.json`.
+Push a tag like `v0.1.0`. The release workflow compiles standalone executables for Linux
+(x86-64, arm64), macOS (arm64) and Windows (x86-64) with `bun build --compile`, signs them
+with cosign, and attaches them to the GitHub release with SLSA provenance.
 
-## Using with coding agents
+## Development
 
-[AGENTS.md](AGENTS.md) is written for AI coding agents (Claude Code reads it via
-`CLAUDE.md`; Codex, Cursor and others read it directly). It covers the commands, the
-recipe for adding a function, the metadata checklist and the sharp edges. A good first
-prompt:
+[AGENTS.md](AGENTS.md) covers the layout, how to add a function, and the sharp edges. This
+worker was generated from [vgi-starter-typescript](https://github.com/Query-farm/vgi-starter-typescript);
+`make template-diff` shows upstream template changes. Requires `@query-farm/vgi` 0.48.2 or later.
 
-> Read AGENTS.md. Replace `fetch_items` with `forecast(lat DOUBLE, lon DOUBLE)` that calls
-> the Open-Meteo API. Include full metadata, a mock-server test and a `SLACK_LIVE` test.
-> You're done when `make check` passes.
+## License
 
-## Keeping up with the template
-
-`make template-diff` shows what changed upstream (CI, docs, examples) since your copy was
-made. Your copy records its template version in `.vgi-slack.json`.
-
-## Learn more
-
-- [What is VGI?](https://query.farm/vgi) · [Getting started](https://query.farm/vgi/getting-started) · [Building a worker](https://query.farm/vgi/building-a-worker)
-- [TypeScript SDK docs](https://query.farm/vgi/docs/typescript/): [scalar tutorial](https://query.farm/vgi/docs/typescript/tutorial/scalar/), [table tutorial](https://query.farm/vgi/docs/typescript/tutorial/table/)
-- [Distributing a worker](https://query.farm/vgi/distributing-a-worker) · [Choosing a language](https://query.farm/vgi/languages) · [llms.txt](https://query.farm/vgi/llms.txt)
-- SDK source: [@query-farm/vgi](https://github.com/Query-farm/vgi-typescript) · RPC layer: [https://vgi-rpc-typescript.query.farm](https://vgi-rpc-typescript.query.farm)
-
-## Support
-
-Open an issue on this repository. For VGI itself, see [query.farm](https://query.farm).
-
-## Authorship & license
-
-The starter template is written by [Query.Farm](https://query.farm) and released under
-the [BSD Zero Clause License](LICENSE) (0BSD). Use it for anything, with no attribution
-required. Replace this section with your own license once the code is yours.
+[0BSD](LICENSE). Copyright 2026 Query.Farm LLC.
