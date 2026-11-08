@@ -1,13 +1,13 @@
 /**
  * The worker entry point.
  *
- *   bin/vgi-starter-worker                      # stdio: what DuckDB launches by default
- *   bin/vgi-starter-worker --http --port 8000   # HTTP: for Docker / hosted deploys
- *   bin/vgi-starter-worker --help
+ *   bin/vgi-slack-worker                      # stdio: what DuckDB launches by default
+ *   bin/vgi-slack-worker --http --port 8000   # HTTP: for Docker / hosted deploys
+ *   bin/vgi-slack-worker --help
  *
  * Attach it from DuckDB:
  *
- *   ATTACH 'starter' (TYPE vgi, LOCATION '/abs/path/to/bin/vgi-starter-worker');
+ *   ATTACH 'slack' (TYPE vgi, LOCATION '/abs/path/to/bin/vgi-slack-worker');
  */
 
 import { CATALOG } from "./catalog.ts";

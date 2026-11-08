@@ -13,5 +13,8 @@
   "optional_files": [
     ".github/workflows/nightly.yml",
     ".github/dependabot.yml"
-  ]
+  ],
+  "name": "slack",
+  "repo": "your-org/vgi-slack",
+  "initialized": "2026-11-08"
 }
