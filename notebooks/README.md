@@ -142,3 +142,8 @@ The full source fingerprint, fixture hash and exact 28-request audit stay fixed
 (14 successful pages plus 14 handled 429s). Boundary, timestamp, identity, duplicate,
 reply-count and availability invariants pass, along with three runner guards and
 fixture write/unknown-method rejection checks.
+
+The Haybarn connection uses an empty temporary SQL secret directory with persistent
+secrets disabled. The selected worker path receives only explicit fixture dummy
+credentials. Assertions confirm no SQL secrets exist before ATTACH or at cleanup.
+Existing saved SQL credentials are neither loaded nor modified.
