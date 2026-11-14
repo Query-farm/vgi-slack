@@ -1,0 +1,240 @@
+{
+  "provenance": "Entirely synthetic workspace, users and messages; never captured from Slack. Exact microsecond message identifiers.",
+  "history_interval_closed_utc": [
+    "2026-01-01T00:00:00Z",
+    "2026-01-01T03:00:00Z"
+  ],
+  "channels": [
+    {
+      "id": "C0HELP",
+      "name": "help",
+      "is_private": false,
+      "is_archived": false,
+      "is_member": true,
+      "num_members": 4,
+      "created": 1767139200,
+      "topic": {
+        "value": "Synthetic fixture"
+      },
+      "purpose": {
+        "value": "Notebook only"
+      }
+    },
+    {
+      "id": "C0EMPTY",
+      "name": "empty",
+      "is_private": false,
+      "is_archived": false,
+      "is_member": true,
+      "num_members": 4,
+      "created": 1767139200,
+      "topic": {
+        "value": "Synthetic fixture"
+      },
+      "purpose": {
+        "value": "Notebook only"
+      }
+    },
+    {
+      "id": "C0OTHER",
+      "name": "unobserved",
+      "is_private": false,
+      "is_archived": false,
+      "is_member": false,
+      "num_members": 4,
+      "created": 1767139200,
+      "topic": {
+        "value": "Synthetic fixture"
+      },
+      "purpose": {
+        "value": "Notebook only"
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "U0A",
+      "name": "Analyst A",
+      "real_name": "Analyst A",
+      "is_bot": false,
+      "deleted": false,
+      "profile": {
+        "display_name": "Analyst A",
+        "real_name": "Analyst A"
+      }
+    },
+    {
+      "id": "U0B",
+      "name": "Analyst B",
+      "real_name": "Analyst B",
+      "is_bot": false,
+      "deleted": false,
+      "profile": {
+        "display_name": "Analyst B",
+        "real_name": "Analyst B"
+      }
+    },
+    {
+      "id": "U0BOT",
+      "name": "Fixture Bot",
+      "real_name": "Fixture Bot",
+      "is_bot": true,
+      "deleted": false,
+      "profile": {
+        "display_name": "Fixture Bot",
+        "real_name": "Fixture Bot"
+      }
+    },
+    {
+      "id": "U0GONE",
+      "name": "Former Participant",
+      "real_name": "Former Participant",
+      "is_bot": false,
+      "deleted": true,
+      "profile": {
+        "display_name": "Former Participant",
+        "real_name": "Former Participant"
+      }
+    }
+  ],
+  "history": {
+    "C0HELP": [
+      {
+        "type": "message",
+        "ts": "1767225600.000000",
+        "text": "Start boundary",
+        "user": "U0MISSING"
+      },
+      {
+        "type": "message",
+        "ts": "1767226200.000100",
+        "text": "Question A",
+        "thread_ts": "1767226200.000100",
+        "reply_count": 3,
+        "user": "U0A"
+      },
+      {
+        "type": "message",
+        "ts": "1767227400.000100",
+        "text": "Unthreaded note",
+        "user": "U0A"
+      },
+      {
+        "type": "message",
+        "ts": "1767228600.000100",
+        "text": "Question B",
+        "thread_ts": "1767228600.000100",
+        "reply_count": 2,
+        "user": "U0B"
+      },
+      {
+        "type": "message",
+        "ts": "1767229200.000000",
+        "user": "U0B",
+        "text": "Exact 1-hour boundary"
+      },
+      {
+        "type": "message",
+        "ts": "1767230100.000100",
+        "text": "Automated notice",
+        "bot_id": "B0FIXTURE",
+        "subtype": "bot_message",
+        "user": "U0BOT"
+      },
+      {
+        "type": "message",
+        "ts": "1767231000.000100",
+        "text": "Question C with zero replies",
+        "thread_ts": "1767231000.000100",
+        "reply_count": 0,
+        "user": "U0A"
+      },
+      {
+        "type": "message",
+        "ts": "1767231900.000100",
+        "text": "Historical participant",
+        "user": "U0GONE"
+      },
+      {
+        "type": "message",
+        "ts": "1767232800.000000",
+        "user": "U0B",
+        "text": "Exact 2-hour boundary"
+      },
+      {
+        "type": "message",
+        "ts": "1767233400.000100",
+        "text": "Question D",
+        "thread_ts": "1767233400.000100",
+        "reply_count": 1,
+        "user": "U0B"
+      },
+      {
+        "type": "message",
+        "ts": "1767235500.000100",
+        "text": "Synthetic channel join",
+        "subtype": "channel_join"
+      },
+      {
+        "type": "message",
+        "ts": "1767236400.000000",
+        "text": "End boundary",
+        "user": "U0A"
+      }
+    ],
+    "C0EMPTY": []
+  },
+  "thread_replies": {
+    "1767226200.000100": [
+      {
+        "type": "message",
+        "ts": "1767226500.000100",
+        "text": "Response A1",
+        "thread_ts": "1767226200.000100",
+        "user": "U0B"
+      },
+      {
+        "type": "message",
+        "ts": "1767228300.000100",
+        "text": "Automated response",
+        "thread_ts": "1767226200.000100",
+        "bot_id": "B0FIXTURE",
+        "subtype": "bot_message",
+        "user": "U0BOT"
+      },
+      {
+        "type": "message",
+        "ts": "1767234600.000100",
+        "text": "Later response A2",
+        "thread_ts": "1767226200.000100",
+        "user": "U0A"
+      }
+    ],
+    "1767228600.000100": [
+      {
+        "type": "message",
+        "ts": "1767229800.000100",
+        "text": "Response B1",
+        "thread_ts": "1767228600.000100",
+        "user": "U0A"
+      },
+      {
+        "type": "message",
+        "ts": "1767232200.000100",
+        "text": "Response B2",
+        "thread_ts": "1767228600.000100",
+        "user": "U0B"
+      }
+    ],
+    "1767231000.000100": [],
+    "1767233400.000100": [
+      {
+        "type": "message",
+        "ts": "1767234000.000100",
+        "text": "Reply with missing directory identity",
+        "thread_ts": "1767233400.000100",
+        "user": "U0MISSING"
+      }
+    ]
+  }
+}

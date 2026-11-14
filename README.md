@@ -148,3 +148,7 @@ worker was generated from [vgi-starter-typescript](https://github.com/Query-farm
 ## License
 
 [0BSD](LICENSE). Copyright 2026 Query.Farm LLC.
+
+## Notebooks
+
+See the [executed history, threads and observation-window walkthrough](notebooks/README.md).

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+artifacts/
+validation/
+
+node_modules/

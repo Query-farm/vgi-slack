@@ -1,0 +1,7 @@
+{
+  "sha256": "1bfe109f4d06673c0294e21ce2cd135167d21e5ed094fa0f381f4fed6011fe54",
+  "filename": "workspace.json",
+  "synthetic": true,
+  "page_size": 3,
+  "rate_limit": "First request for each exact read URL returns429 Retry-After0; next succeeds."
+}
