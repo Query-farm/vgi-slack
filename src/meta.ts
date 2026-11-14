@@ -106,12 +106,21 @@ export const AGENT_TEST_TASKS = [
   },
   {
     name: "busiest_thread",
-    prompt: "Using the slack worker, show the replies in the thread with the most replies in #general, oldest first.",
+    prompt:
+      "Using the slack worker, find the thread with the most replies in #general and save its replies, " +
+      "oldest first, as a temp view or temp table named busiest_thread with columns ts and text.",
   },
   { name: "member_channels", prompt: "Using the slack worker, list the names of the channels the bot is a member of." },
   {
     name: "general_message_count",
     prompt: "Using the slack worker, how many top-level messages are in the #general channel?",
+  },
+  {
+    name: "general_messages_by_tz",
+    prompt:
+      "Using the slack worker, count the top-level messages people (not bots) posted in #general during " +
+      "January 2026 (UTC), grouped by the author's time zone, including authors who have since left the " +
+      "workspace. Save the result as a temp view or temp table named general_by_tz with columns tz and messages.",
   },
   {
     name: "top_poster",

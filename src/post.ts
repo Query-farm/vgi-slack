@@ -147,6 +147,18 @@ export const postMessage = defineTableFunction<PostArgs, { posted: boolean }>({
 
 // -------------------------------------------------------------- post_messages
 
+/**
+ * Composed example: messages() feeding post_messages(). Every top-level message from a
+ * person in the last day that nobody has replied to gets a nudge in its own thread.
+ */
+export const NUDGE_UNANSWERED_SQL =
+  "SELECT count(*) AS nudged FROM slack.main.post_messages((" +
+  "SELECT channel_id AS channel, 'Bumping this: is anyone looking at it?' AS text, ts AS thread_ts " +
+  "FROM slack.main.messages('#general', oldest := now() - INTERVAL 1 DAY) " +
+  "WHERE reply_count IS NULL AND subtype IS NULL AND bot_id IS NULL))";
+export const NUDGE_UNANSWERED_DESCRIPTION =
+  "Reply in the thread of every unanswered message people posted in #general in the last day, and count the nudges";
+
 export const postMessages = defineTableInOutFunction<Record<string, never>, null>({
   name: "post_messages",
   description: "Post one Slack message per input row (columns channel, text, optional thread_ts)",
@@ -227,5 +239,6 @@ export const postMessages = defineTableInOutFunction<Record<string, never>, null
         "'Host ' || h || ' is down' AS text FROM (VALUES ('web-1'), ('web-2')) t(h)))",
       description: "Post an alert per down host and count them",
     },
+    { sql: NUDGE_UNANSWERED_SQL, description: NUDGE_UNANSWERED_DESCRIPTION },
   ],
 });

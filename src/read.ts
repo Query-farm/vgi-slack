@@ -144,6 +144,24 @@ interface ChannelsArgs {
 
 const CHANNEL_TYPES = ["public_channel", "private_channel", "mpim", "im"];
 
+/**
+ * Composed example: channels() joined to users() on the channel's creator.
+ * Published on channels() and, through catalog.ts, in the schema-level list.
+ */
+export const CHANNEL_CREATORS_SQL =
+  "SELECT c.name, u.real_name AS created_by, c.created_at FROM slack.main.channels() c " +
+  "LEFT JOIN slack.main.users(include_deleted := true) u ON u.id = c.creator ORDER BY c.created_at";
+export const CHANNEL_CREATORS_DESCRIPTION =
+  "Who created each channel the bot can see, oldest channel first (include_deleted keeps creators who have left)";
+
+/** Composed example: a thread from replies() with each author's real name from users(). */
+export const THREAD_WITH_AUTHORS_SQL =
+  "SELECT r.posted_at, coalesce(u.real_name, r.user_id) AS author, r.text " +
+  "FROM slack.main.replies('#general', '1767225900.000100') r " +
+  "LEFT JOIN slack.main.users(include_deleted := true) u ON u.id = r.user_id ORDER BY r.posted_at";
+export const THREAD_WITH_AUTHORS_DESCRIPTION =
+  "Read a thread (parent message first, then replies) with each author's real name instead of a user ID";
+
 export const channels = defineTableFunction<ChannelsArgs, PageState>({
   name: "channels",
   description: "List the Slack channels the bot can see",
@@ -228,6 +246,7 @@ export const channels = defineTableFunction<ChannelsArgs, PageState>({
       sql: "SELECT is_private, count(*) AS channels FROM slack.main.channels(exclude_archived := false) GROUP BY is_private",
       description: "Count public and private channels, including archived ones",
     },
+    { sql: CHANNEL_CREATORS_SQL, description: CHANNEL_CREATORS_DESCRIPTION },
   ],
 });
 
@@ -512,5 +531,6 @@ export const replies = defineTableFunction<RepliesArgs, PageState>({
       sql: "SELECT posted_at, user_id, text FROM slack.main.replies('#general', '1700000000.000100') ORDER BY posted_at",
       description: "Read one thread in order",
     },
+    { sql: THREAD_WITH_AUTHORS_SQL, description: THREAD_WITH_AUTHORS_DESCRIPTION },
   ],
 });

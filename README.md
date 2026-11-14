@@ -88,6 +88,13 @@ SELECT posted_at, user_id, text FROM slack.main.replies('#general', '1700000000.
 SELECT ts FROM slack.main.post_message('#deploys', 'Deployed *v1.2* :rocket:');
 SELECT ts FROM slack.main.post_message('#deploys', 'All green', thread_ts := '1700000000.000100');
 
+-- Nudge every message people posted in #general in the last day that nobody has answered:
+-- messages() feeds post_messages(), which replies in each message's thread.
+SELECT count(*) AS nudged FROM slack.main.post_messages((
+  SELECT channel_id AS channel, 'Bumping this: is anyone looking at it?' AS text, ts AS thread_ts
+  FROM slack.main.messages('#general', oldest := now() - INTERVAL 1 DAY)
+  WHERE reply_count IS NULL AND subtype IS NULL AND bot_id IS NULL));
+
 -- One alert per row of a query.
 SELECT count(*) AS posted FROM slack.main.post_messages((
   SELECT '#alerts' AS channel, 'Disk ' || pct || '% full on ' || host AS text

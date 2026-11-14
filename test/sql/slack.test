@@ -195,6 +195,25 @@ SELECT * FROM slack.main.replies('#general', 'not-a-ts');
 ----
 <REGEX>:.*
 
+# Composed example (THREAD_WITH_AUTHORS_SQL): a thread with each author's real name.
+query TT
+SELECT coalesce(u.real_name, r.user_id) AS author, r.text
+FROM slack.main.replies('#general', '1767225900.000100') r
+LEFT JOIN slack.main.users(include_deleted := true) u ON u.id = r.user_id ORDER BY r.posted_at;
+----
+Ada Lovelace	message 05
+Grace Hopper	reply one
+Ada Lovelace	reply two
+
+# Composed example (CHANNEL_CREATORS_SQL): who created each channel, oldest first.
+query TT
+SELECT c.name, u.real_name AS created_by FROM slack.main.channels() c
+LEFT JOIN slack.main.users(include_deleted := true) u ON u.id = c.creator ORDER BY c.created_at;
+----
+general	Ada Lovelace
+random	Grace Hopper
+secret	Ada Lovelace
+
 # ---------------------------------------------------------------- post_message
 
 query TT
@@ -247,6 +266,16 @@ query T
 SELECT thread_ts FROM slack.main.post_messages((SELECT 'C0GENERAL' AS channel, 'r' AS text, '1767225900.000100' AS thread_ts));
 ----
 1767225900.000100
+
+# Composed example (NUDGE_UNANSWERED_SQL, with a fixed window instead of the last day):
+# messages() feeds post_messages(), one thread reply per unanswered message by a person.
+query IT
+SELECT count(*), string_agg(thread_ts, ',' ORDER BY thread_ts) FROM slack.main.post_messages((
+  SELECT channel_id AS channel, 'Bumping this: is anyone looking at it?' AS text, ts AS thread_ts
+  FROM slack.main.messages('#general', oldest := TIMESTAMPTZ '2026-01-01 00:20:00+00')
+  WHERE reply_count IS NULL AND subtype IS NULL AND bot_id IS NULL));
+----
+5	1767226800.000100,1767226860.000100,1767226920.000100,1767226980.000100,1767227040.000100
 
 # Empty input posts nothing.
 query I
