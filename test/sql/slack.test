@@ -277,6 +277,16 @@ SELECT count(*), string_agg(thread_ts, ',' ORDER BY thread_ts) FROM slack.main.p
 ----
 5	1767226800.000100,1767226860.000100,1767226920.000100,1767226980.000100,1767227040.000100
 
+# NUDGE_UNANSWERED_SQL as published: the last-day window must bind without ICU
+# (TIMESTAMPTZ - INTERVAL does not); the mock's history is from January 2026, so 0.
+query I
+SELECT count(*) AS nudged FROM slack.main.post_messages((
+  SELECT channel_id AS channel, 'Bumping this: is anyone looking at it?' AS text, ts AS thread_ts
+  FROM slack.main.messages('#general', oldest := now()::TIMESTAMP - INTERVAL 1 DAY)
+  WHERE reply_count IS NULL AND subtype IS NULL AND bot_id IS NULL));
+----
+0
+
 # Empty input posts nothing.
 query I
 SELECT count(*) FROM slack.main.post_messages((SELECT '#random' AS channel, 'x' AS text WHERE false));

@@ -17,11 +17,12 @@ tasks:
   # Table function arguments must be constants, so an agent finds the thread first
   # and then reads it with replies(). The grader cannot call replies() with a computed
   # ts, so it checks the saved answer instead: its replies (rows that are not top-level
-  # history; the parent may be included or not) must number exactly the busiest
-  # thread's reply_count, with no duplicates.
+  # history, except replies also sent to the channel; the parent may be included or not)
+  # must number exactly the busiest thread's reply_count, with no duplicates.
   - name: busiest_thread
     check_sql: >-
-      SELECT count(*) FILTER (WHERE ts NOT IN (SELECT ts FROM slack.main.messages('#general')))
+      SELECT count(*) FILTER (WHERE ts NOT IN (SELECT ts FROM slack.main.messages('#general')
+                                               WHERE thread_ts IS NULL OR thread_ts = ts))
                = (SELECT max(reply_count) FROM slack.main.messages('#general'))
         AND count(*) = count(DISTINCT ts)
       FROM busiest_thread

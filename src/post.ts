@@ -154,7 +154,7 @@ export const postMessage = defineTableFunction<PostArgs, { posted: boolean }>({
 export const NUDGE_UNANSWERED_SQL =
   "SELECT count(*) AS nudged FROM slack.main.post_messages((" +
   "SELECT channel_id AS channel, 'Bumping this: is anyone looking at it?' AS text, ts AS thread_ts " +
-  "FROM slack.main.messages('#general', oldest := now() - INTERVAL 1 DAY) " +
+  "FROM slack.main.messages('#general', oldest := now()::TIMESTAMP - INTERVAL 1 DAY) " +
   "WHERE reply_count IS NULL AND subtype IS NULL AND bot_id IS NULL))";
 export const NUDGE_UNANSWERED_DESCRIPTION =
   "Reply in the thread of every unanswered message people posted in #general in the last day, and count the nudges";

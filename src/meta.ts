@@ -118,8 +118,9 @@ export const AGENT_TEST_TASKS = [
   {
     name: "general_messages_by_tz",
     prompt:
-      "Using the slack worker, count the top-level messages people (not bots) posted in #general during " +
-      "January 2026 (UTC), grouped by the author's time zone, including authors who have since left the " +
+      "Using the slack worker, count the top-level messages in #general's history (any subtype) whose author " +
+      "is a person, not a bot, posted during January 2026 (UTC), grouped by the author's time zone, " +
+      "including authors who have since left the " +
       "workspace. Save the result as a temp view or temp table named general_by_tz with columns tz and messages.",
   },
   {

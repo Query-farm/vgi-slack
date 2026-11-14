@@ -92,7 +92,7 @@ SELECT ts FROM slack.main.post_message('#deploys', 'All green', thread_ts := '17
 -- messages() feeds post_messages(), which replies in each message's thread.
 SELECT count(*) AS nudged FROM slack.main.post_messages((
   SELECT channel_id AS channel, 'Bumping this: is anyone looking at it?' AS text, ts AS thread_ts
-  FROM slack.main.messages('#general', oldest := now() - INTERVAL 1 DAY)
+  FROM slack.main.messages('#general', oldest := now()::TIMESTAMP - INTERVAL 1 DAY)
   WHERE reply_count IS NULL AND subtype IS NULL AND bot_id IS NULL));
 
 -- One alert per row of a query.
