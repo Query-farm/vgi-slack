@@ -13,7 +13,7 @@
 import { field, type VgiDataType, type VgiField } from "@query-farm/vgi";
 
 export const CATALOG_NAME = "slack";
-export const VERSION = "0.1.1";
+export const VERSION = "0.1.2";
 
 export const SOURCE_URL = "https://github.com/Query-farm/vgi-slack";
 
@@ -87,7 +87,17 @@ export const CATALOG_DOC_MD =
   "redacts it from `duckdb_databases()` and never logs it.\n\n" +
   "Bot token scopes: `channels:read`, `groups:read`, `channels:history`, `groups:history`, " +
   "`users:read` (plus `users:read.email` for emails) and `chat:write`. Invite the bot to " +
-  "every channel it should read or post in.";
+  "every channel it should read or post in.\n\n" +
+  "## Sources and references\n\n" +
+  "- [Slack Web API](https://docs.slack.dev/apis/web-api/): the HTTP API every function calls, " +
+  "with the [method reference](https://docs.slack.dev/reference/methods) for `conversations.*`, " +
+  "`users.list`, `auth.test` and `chat.postMessage`.\n" +
+  "- [Slack apps](https://api.slack.com/apps): create an app and install it to get the bot " +
+  "token; [token types](https://docs.slack.dev/authentication/tokens) explains bot tokens.\n" +
+  "- [OAuth scopes](https://docs.slack.dev/reference/scopes): what each scope above grants.";
+
+/** The schema's one-line comment; the richer Markdown lives in `SCHEMA_DOC_MD` (VGI102). */
+export const SCHEMA_COMMENT = "Slack readers for channels, people and conversations, and writers that post messages.";
 
 export const SCHEMA_DOC_LLM =
   "Everything Slack lives in `main`. Readers stream Slack's paginated Web API one page per " +

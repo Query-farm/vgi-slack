@@ -6,7 +6,7 @@
  */
 
 import type { CatalogDescriptor, VgiFunction } from "@query-farm/vgi";
-import { CATALOG_COMMENT, CATALOG_NAME, CATALOG_TAGS, SCHEMA_DOC_MD, SCHEMA_TAGS, SOURCE_URL } from "./meta.ts";
+import { CATALOG_COMMENT, CATALOG_NAME, CATALOG_TAGS, SCHEMA_COMMENT, SCHEMA_TAGS, SOURCE_URL } from "./meta.ts";
 import { postMessage, postMessages } from "./post.ts";
 import { authInfo, channels, messages, replies, users } from "./read.ts";
 import { ATTACH_OPTIONS } from "./slack_catalog.ts";
@@ -50,7 +50,7 @@ export const CATALOG: CatalogDescriptor = {
   schemas: [
     {
       path: ["main"],
-      comment: SCHEMA_DOC_MD,
+      comment: SCHEMA_COMMENT,
       functions: FUNCTIONS,
       tags: { ...SCHEMA_TAGS, "vgi.example_queries": JSON.stringify(ALL_EXAMPLES) },
     },

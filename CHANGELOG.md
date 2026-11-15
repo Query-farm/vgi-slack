@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 (2026-11-14)
+
+- Docs link to upstream sources: the catalog docs now link the Slack Web API and its method
+  reference, the Slack apps page for creating a bot token, token types and OAuth scopes
+  (vgi-lint VGI183).
+- The `main` schema comment is now a one-line summary; its Markdown docs no longer repeat it
+  (vgi-lint VGI102).
+
 ## 0.1.1 (2026-11-14)
 
 - The catalog comment is now one plain-text sentence describing the worker instead of the
