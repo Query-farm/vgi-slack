@@ -13,7 +13,7 @@
 import { field, type VgiDataType, type VgiField } from "@query-farm/vgi";
 
 export const CATALOG_NAME = "slack";
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 export const SOURCE_URL = "https://github.com/Query-farm/vgi-slack";
 
@@ -63,6 +63,11 @@ export function column(name: string, type: VgiDataType, comment: string, nullabl
 
 const ATTACH_SQL =
   "ATTACH 'slack' (TYPE vgi, LOCATION '/abs/path/bin/vgi-slack-worker', token getenv('SLACK_BOT_TOKEN'))";
+
+/** One-line plain-text catalog comment: what directories show as the worker's description. */
+export const CATALOG_COMMENT =
+  "Slack workspace data as SQL tables: channels, people, channel history and threads, read " +
+  "through the Slack Web API with a bot token, plus posting messages from a query.";
 
 export const CATALOG_DOC_LLM =
   "Slack as SQL: read a workspace's channels, people and conversation history, and post " +

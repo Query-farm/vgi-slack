@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (2026-11-14)
+
+- The catalog comment is now one plain-text sentence describing the worker instead of the
+  Markdown docs page. The full docs stay in the catalog's `vgi.doc_md` and `vgi.doc_llm` tags.
+
 ## 0.1.0 (2026-11-14)
 
 First release.
