@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 (2026-11-16)
+
+- Bump @query-farm/vgi to 0.50.1.
+- CI tooling (haybarn-unittest, lint helpers) runs on Python 3.14.
+
 ## 0.1.2 (2026-11-14)
 
 - Docs link to upstream sources: the catalog docs now link the Slack Web API and its method
