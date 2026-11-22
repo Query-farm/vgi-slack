@@ -11,10 +11,10 @@
   "dependencies": {
     "@query-farm/apache-arrow": "^21.1.1",
     "@query-farm/vgi": "^0.50.1",
-    "@query-farm/vgi-rpc": "^0.29.7"
+    "@query-farm/vgi-rpc": "^0.29.8"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.6",
+    "@biomejs/biome": "^2.6.8",
     "@types/bun": "^1.3.0",
     "typescript": "^7.0.2"
   }
